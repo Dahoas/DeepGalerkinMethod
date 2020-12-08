@@ -7,8 +7,10 @@ import tensorflow as tf
 import numpy as np
 import scipy.stats as spstats
 import matplotlib.pyplot as plt
+from heat_plot import *
 
 #%% Parameters 
+eps = 1e-5
 
 # Option parameters
 r = 0.05           # Interest rate
@@ -58,7 +60,7 @@ def BlackScholesCall(S, K, r, sigma, t):
         t:     time
     ''' 
     
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * (T-t))/(sigma * np.sqrt(T-t))
+    d1 = (np.log(S/K) + (r + sigma**2 / 2) * (T-t))/(sigma * np.sqrt(T-t)+eps)
     d2 = d1 - (sigma * np.sqrt(T-t))
 
     callPrice = S * spstats.norm.cdf(d1) - K * np.exp(-r * (T-t)) * spstats.norm.cdf(d2)
@@ -156,6 +158,9 @@ sess.run(init_op)
 
 #%% Train network
 # for each sampling stage
+losses = []
+l1_losses = []
+l3_losses = []
 for i in range(sampling_stages):
     
     # sample uniformly from the required regions
@@ -167,7 +172,13 @@ for i in range(sampling_stages):
                                 feed_dict = {t_interior_tnsr:t_interior, S_interior_tnsr:S_interior, t_terminal_tnsr:t_terminal, S_terminal_tnsr:S_terminal})
     
     print(loss, L1, L3, i)
+    losses.append(loss)
+    l1_losses.append(L1)
+    l3_losses.append(L3)
 
+plot_loss(losses,"european_total_loss")
+plot_loss(l1_losses,"european_l1_loss")
+plot_loss(l3_losses,"european_l3_loss")
 # save outout
 if saveOutput:
     saver = tf.train.Saver()

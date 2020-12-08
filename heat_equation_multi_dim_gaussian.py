@@ -9,6 +9,7 @@ import numpy as np
 import scipy.stats as spstats
 import matplotlib.pyplot as plt
 import math
+from heat_plot import *
 
 #%% Parameters 
 k=1
@@ -102,7 +103,7 @@ def sampler(nSim_interior, nSim_terminal):
     t_init = np.zeros((nSim_terminal, 1))
     #Change sampling strategy to sample in areas that matter more
     #Should bound domain somehow
-    S_init = np.random.uniform(0,1/6,size = [nSim_terminal,dim])
+    S_init = np.random.uniform(-.25,.25,size = [nSim_terminal,dim])
     
     return t_interior, S_interior, t_init, S_init
 
@@ -146,6 +147,7 @@ def loss(model, t_interior, S_interior, t_terminal, S_terminal):
     #Target is boundary function
     #Try to avoid floating point equality
     #Placeholder is kind of like \cdot(precomposition)
+    #Currently initial condition is tight gaussian heat spike
     gauss = lambda x : np.prod(np.exp(-3*x**2),axis=1)
     tf_gauss = tf.py_function(func=gauss,inp=[S_terminal],Tout=tf.float32)
     target_payoff = tf_gauss
@@ -188,6 +190,9 @@ sess.run(init_op)
 
 #%% Train network
 # for each sampling stage
+losses = []
+l1_losses = []
+l3_losses = []
 for i in range(sampling_stages):
     
     # sample uniformly from the required regions
@@ -199,6 +204,13 @@ for i in range(sampling_stages):
                                 feed_dict = {t_interior_tnsr:t_interior, S_interior_tnsr:S_interior, t_init_tnsr:t_terminal, S_init_tnsr:S_terminal})
     
     print(loss, L1, L3, i)
+    losses.append(loss)
+    l1_losses.append(L1)
+    l3_losses.append(L3)
+
+plot_loss(losses,"heat_total_loss")
+plot_loss(l1_losses,"heat_l1_loss")
+plot_loss(l3_losses,"heat_l3_loss")
 
 # save outout
 if saveOutput:
