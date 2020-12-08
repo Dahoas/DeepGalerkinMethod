@@ -15,6 +15,8 @@ from heat_plot import *
 k=1
 eps = 1e-5
 dim = 1
+l1_loss_scale = 1
+l3_loss_scale = 10
 
 # Solution parameters (domain on which to solve PDE)
 t_low = 0 + eps   # time lower bound
@@ -33,8 +35,8 @@ sampling_stages  = 100   # number of times to resample new time-space domain poi
 steps_per_sample = 10    # number of SGD steps to take before re-sampling
 
 # Sampling parameters
-nSim_interior = 2000
-nSim_initial = 20
+nSim_interior = 1000
+nSim_initial = 500
 S_multiplier  = 1.5   # multiplier for oversampling i.e. draw S from [S_low, S_high * S_multiplier]
 
 # Plot options
@@ -70,10 +72,15 @@ figureName = 'HeatEquation_multi_dim.png'
 
 #evaluating blackScholes
 def HeatCall(x,t):
-    ''' Analytical solution for European call option price under Black-Scholes model '''
-    exp = np.prod(np.exp(-x**2/(4*k*t)),axis=1)
-    #add eps for t= 0
-    frac = np.sqrt(1/(4 * math.pi * k *t + eps))**dim
+    exp = 0
+    frac = 0
+    if t == 0:
+        exp = np.prod(np.exp(-3*x**2))
+        frac = np.sqrt(1/(4 * math.pi))**dim
+    else:
+        exp = np.prod(np.exp(-x**2/(4*k*t)),axis=1)
+        #add eps for t= 0
+        frac = np.sqrt(1/(4 * math.pi * k *t + eps))**dim
 
     return frac*exp
     
@@ -103,8 +110,10 @@ def sampler(nSim_interior, nSim_terminal):
     t_init = np.zeros((nSim_terminal, 1))
     #Change sampling strategy to sample in areas that matter more
     #Should bound domain somehow
-    S_init = np.random.uniform(-.25,.25,size = [nSim_terminal,dim])
-    
+    S_init_spread = np.random.uniform(-1,1,size = [nSim_terminal-50,dim])
+    S_init_clustered = np.random.normal(0,.1,size = [50,dim])
+    S_init = np.concatenate((S_init_spread,S_init_clustered),axis=0)
+
     return t_interior, S_interior, t_init, S_init
 
 #%% Loss function for Fokker-Planck equation
@@ -156,7 +165,7 @@ def loss(model, t_interior, S_interior, t_terminal, S_terminal):
     
     L3 = tf.reduce_mean( tf.square(fitted_payoff - target_payoff) )
 
-    return L1, L3
+    return l1_loss_scale*L1, l3_loss_scale*L3
 
 #%% Set up network
 
@@ -255,7 +264,7 @@ if dim == 1:
         plt.plot(S_plot, fitted_optionValue[0], color = 'r', label='DGM estimate')    
         
         # subplot options
-        plt.ylim(ymin=-1.0, ymax=1.0)
+        plt.ylim(ymin=-1.0, ymax=3.0)
         plt.xlim(xmin=x_low, xmax=x_high)
         plt.xlabel(r"Space", fontsize=15, labelpad=10)
         plt.ylabel(r"Heat", fontsize=15, labelpad=20)

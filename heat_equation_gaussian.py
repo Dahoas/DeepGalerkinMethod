@@ -9,10 +9,13 @@ import numpy as np
 import scipy.stats as spstats
 import matplotlib.pyplot as plt
 import math
+from heat_plot import *
 
 #%% Parameters 
 k=1
 eps = 1e-5
+l1_loss_scale = 5
+l3_loss_scale = 1
 
 # Solution parameters (domain on which to solve PDE)
 t_low = 0 + eps   # time lower bound
@@ -31,7 +34,7 @@ steps_per_sample = 10    # number of SGD steps to take before re-sampling
 
 # Sampling parameters
 nSim_interior = 2000
-nSim_initial = 20
+nSim_initial = 200
 S_multiplier  = 1.5   # multiplier for oversampling i.e. draw S from [S_low, S_high * S_multiplier]
 
 # Plot options
@@ -67,10 +70,16 @@ figureName = 'HeatEquation_gaussian.png'
 
 #evaluating blackScholes
 def HeatCall(x,t):
-    ''' Analytical solution for European call option price under Black-Scholes model '''
-    exp = np.exp(-x**2/(4*k*t))
-    #add eps for t= 0
-    frac = np.sqrt(1/(4 * math.pi * k *t + eps))
+    x = np.reshape(x,(-1,1))
+    exp = 0
+    frac = 0
+    if t == 0:
+        exp = np.prod(np.exp(-3*x**2))
+        frac = np.sqrt(1/(4 * math.pi))**1
+    else:
+        exp = np.prod(np.exp(-x**2/(4*k*t)),axis=1)
+        #add eps for t= 0
+        frac = np.sqrt(1/(4 * math.pi * k *t + eps))**1
 
     return frac*exp
     
@@ -144,7 +153,7 @@ def loss(model, t_interior, S_interior, t_terminal, S_terminal):
     
     L3 = tf.reduce_mean( tf.square(fitted_payoff - target_payoff) )
 
-    return L1, L3
+    return l1_loss_scale*L1, l1_loss_scale*L3
 
 #%% Set up network
 
@@ -177,6 +186,9 @@ sess.run(init_op)
 
 #%% Train network
 # for each sampling stage
+losses = []
+l1_losses = []
+l3_losses = []
 for i in range(sampling_stages):
     
     # sample uniformly from the required regions
@@ -188,6 +200,12 @@ for i in range(sampling_stages):
                                 feed_dict = {t_interior_tnsr:t_interior, S_interior_tnsr:S_interior, t_init_tnsr:t_terminal, S_init_tnsr:S_terminal})
     
     print(loss, L1, L3, i)
+    losses.append(loss)
+    l1_losses.append(L1)
+    l3_losses.append(L3)
+plot_loss(losses,"heat_total_loss")
+plot_loss(l1_losses,"heat_l1_loss")
+plot_loss(l3_losses,"heat_l3_loss")
 
 # save outout
 if saveOutput:
@@ -228,7 +246,7 @@ for i, curr_t in enumerate(valueTimes):
     plt.plot(S_plot, fitted_optionValue[0], color = 'r', label='DGM estimate')    
     
     # subplot options
-    plt.ylim(ymin=-1.0, ymax=1.0)
+    plt.ylim(ymin=-1.0, ymax=3.0)
     plt.xlim(xmin=x_low, xmax=x_high)
     plt.xlabel(r"Spot Price", fontsize=15, labelpad=10)
     plt.ylabel(r"Option Price", fontsize=15, labelpad=20)

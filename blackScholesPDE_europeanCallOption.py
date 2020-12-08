@@ -42,9 +42,9 @@ S_multiplier  = 1.5   # multiplier for oversampling i.e. draw S from [S_low, S_h
 n_plot = 41  # Points on plot grid for each dimension
 
 # Save options
-saveOutput = False
+saveOutput = True
 saveName   = 'BlackScholes_EuropeanCall'
-saveFigure = False
+saveFigure = True
 figureName = 'BlackScholes_EuropeanCall.png'
 
 #%% Black-Scholes European call price
