@@ -1,2 +1,2 @@
-model_checkpoint_path: "HeatEquation_gaussian"
-all_model_checkpoint_paths: "HeatEquation_gaussian"
+model_checkpoint_path: "HeatEquation_multi_dim"
+all_model_checkpoint_paths: "HeatEquation_multi_dim"
