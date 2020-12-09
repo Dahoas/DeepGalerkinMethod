@@ -14,7 +14,8 @@ from heat_plot import *
 #%% Parameters 
 k=1
 eps = 1e-5
-l1_loss_scale = 5
+l1_loss_scale = 1
+l2_loss_scale = 1
 l3_loss_scale = 1
 
 # Solution parameters (domain on which to solve PDE)
@@ -34,6 +35,7 @@ steps_per_sample = 10    # number of SGD steps to take before re-sampling
 
 # Sampling parameters
 nSim_interior = 2000
+nSim_bound = 200#200 for each endpoint
 nSim_initial = 200
 S_multiplier  = 1.5   # multiplier for oversampling i.e. draw S from [S_low, S_high * S_multiplier]
 
@@ -88,7 +90,7 @@ def HeatCall(x,t):
 
 #%% Sampling function - randomly sample time-space pairs 
 
-def sampler(nSim_interior, nSim_terminal):
+def sampler(nSim_interior, nSim_boundary, nSim_terminal):
     ''' Sample time-space points from the function's domain; points are sampled
         uniformly on the interior of the domain, at the initial/terminal time points
         and along the spatial boundary at different time points. 
@@ -103,18 +105,19 @@ def sampler(nSim_interior, nSim_terminal):
     S_interior = np.random.uniform(low=x_low, high=x_high, size=[nSim_interior, 1])
 
     # Sampler #2: spatial boundary
-        # no spatial boundary condition for this problem
+    t_bound = np.random.uniform(low=t_low,high=t_high,size=[2*nSim_boundary,1])
+    S_bound = np.concatenate((np.zeros((nSim_boundary,1))-1,np.zeros((nSim_boundary,1))+1),axis=0)
     
     # Sampler #3: initial/terminal condition
     t_init = np.zeros((nSim_terminal, 1))
     S_init = np.random.uniform(low=x_low, high=x_high, size = nSim_terminal-1)
     S_init = np.reshape(np.concatenate((S_init,np.array([0.0]*1))),(nSim_terminal,1))
     
-    return t_interior, S_interior, t_init, S_init
+    return t_interior, S_interior,t_bound,S_bound, t_init, S_init
 
 #%% Loss function for Fokker-Planck equation
 
-def loss(model, t_interior, S_interior, t_terminal, S_terminal):
+def loss(model, t_interior, S_interior, t_bound, S_bound, t_terminal, S_terminal):
     ''' Compute total loss for training.
     
     Args:
@@ -140,7 +143,9 @@ def loss(model, t_interior, S_interior, t_terminal, S_terminal):
     L1 = tf.reduce_mean(tf.square(diff_V)) 
     
     # Loss term #2: boundary condition
-        # no boundary condition for this problem
+    #Will want 0 at boundary term
+    fitted_bound = model(t_bound,S_bound)
+    L2 = tf.reduce_mean(tf.square(fitted_bound))
     
     # Loss term #3: initial/terminal condition
     #Target is boundary function
@@ -153,7 +158,7 @@ def loss(model, t_interior, S_interior, t_terminal, S_terminal):
     
     L3 = tf.reduce_mean( tf.square(fitted_payoff - target_payoff) )
 
-    return l1_loss_scale*L1, l1_loss_scale*L3
+    return l1_loss_scale*L1, l2_loss_scale*L2 ,l1_loss_scale*L3
 
 #%% Set up network
 
@@ -166,10 +171,12 @@ t_interior_tnsr = tf.placeholder(tf.float32, [None,1])
 S_interior_tnsr = tf.placeholder(tf.float32, [None,1])
 t_init_tnsr = tf.placeholder(tf.float32, [None,1])
 S_init_tnsr = tf.placeholder(tf.float32, [None,1])
+t_bound_tnsr = tf.placeholder(tf.float32,[None,1])
+S_bound_tnsr = tf.placeholder(tf.float32,[None,1])
 
 # loss 
-L1_tnsr, L3_tnsr = loss(model, t_interior_tnsr, S_interior_tnsr, t_init_tnsr, S_init_tnsr)
-loss_tnsr = L1_tnsr + L3_tnsr
+L1_tnsr, L2_tnsr, L3_tnsr = loss(model, t_interior_tnsr, S_interior_tnsr,t_bound_tnsr,S_bound_tnsr, t_init_tnsr, S_init_tnsr)
+loss_tnsr = L1_tnsr + L2_tnsr + L3_tnsr
 
 # option value function
 V = model(t_interior_tnsr, S_interior_tnsr)
@@ -188,23 +195,26 @@ sess.run(init_op)
 # for each sampling stage
 losses = []
 l1_losses = []
+l2_losses = []
 l3_losses = []
 for i in range(sampling_stages):
     
     # sample uniformly from the required regions
-    t_interior, S_interior, t_terminal, S_terminal = sampler(nSim_interior, nSim_initial)
+    t_interior, S_interior, t_bound,S_bound, t_terminal, S_terminal = sampler(nSim_interior, nSim_bound, nSim_initial)
     
     # for a given sample, take the required number of SGD steps
     for _ in range(steps_per_sample):
-        loss,L1,L3,_ = sess.run([loss_tnsr, L1_tnsr, L3_tnsr, optimizer],
-                                feed_dict = {t_interior_tnsr:t_interior, S_interior_tnsr:S_interior, t_init_tnsr:t_terminal, S_init_tnsr:S_terminal})
+        loss,L1,L2,L3,_ = sess.run([loss_tnsr, L1_tnsr, L2_tnsr, L3_tnsr, optimizer],
+                                feed_dict = {t_interior_tnsr:t_interior, S_interior_tnsr:S_interior,t_bound_tnsr:t_bound,S_bound_tnsr:S_bound, t_init_tnsr:t_terminal, S_init_tnsr:S_terminal})
     
-    print(loss, L1, L3, i)
+    print(loss, L1, L2, L3, i)
     losses.append(loss)
     l1_losses.append(L1)
+    l3_losses.append(L2)
     l3_losses.append(L3)
 plot_loss(losses,"heat_total_loss")
 plot_loss(l1_losses,"heat_l1_loss")
+plot_loss(l2_losses,"heat_l2_loss")
 plot_loss(l3_losses,"heat_l3_loss")
 
 # save outout
@@ -223,7 +233,7 @@ plt.figure()
 plt.figure(figsize = (12,10))
 
 # time values at which to examine density
-valueTimes = [t_low, (2/3)*t_low+(1/3)*t_high, (1/3)*t_low+(2/3)*t_high, t_high]
+valueTimes = [t_low, (5/6)*t_low+(1/6)*t_high, (4/6)*t_low+(2/6)*t_high,(3/6)*t_low+(3/6)*t_high,(2/6)*t_low+(4/6)*t_high,(1/6)*t_low+(5/6)*t_high, t_high]
 
 # vector of t and S values for plotting
 S_plot = np.linspace(x_low, x_high, n_plot)
@@ -231,7 +241,7 @@ S_plot = np.linspace(x_low, x_high, n_plot)
 for i, curr_t in enumerate(valueTimes):
     
     # specify subplot
-    plt.subplot(2,2,i+1)
+    plt.subplot(3,3,i+1)
     
     # simulate process at current t 
     #Note this is vectorized
@@ -248,8 +258,8 @@ for i, curr_t in enumerate(valueTimes):
     # subplot options
     plt.ylim(ymin=-1.0, ymax=3.0)
     plt.xlim(xmin=x_low, xmax=x_high)
-    plt.xlabel(r"Spot Price", fontsize=15, labelpad=10)
-    plt.ylabel(r"Option Price", fontsize=15, labelpad=20)
+    plt.xlabel(r"Space", fontsize=15, labelpad=10)
+    plt.ylabel(r"Heat", fontsize=15, labelpad=20)
     plt.title(r"\boldmath{$t$}\textbf{ = %.2f}"%(curr_t), fontsize=18, y=1.03)
     plt.xticks(fontsize=13)
     plt.yticks(fontsize=13)

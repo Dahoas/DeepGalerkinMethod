@@ -110,9 +110,8 @@ def sampler(nSim_interior, nSim_terminal):
     t_init = np.zeros((nSim_terminal, 1))
     #Change sampling strategy to sample in areas that matter more
     #Should bound domain somehow
-    S_init_spread = np.random.uniform(-1,1,size = [nSim_terminal-50,dim])
-    S_init_clustered = np.random.normal(0,.1,size = [50,dim])
-    S_init = np.concatenate((S_init_spread,S_init_clustered),axis=0)
+    S_init = np.random.uniform(low=x_low, high=x_high, size = nSim_terminal-1)
+    S_init = np.reshape(np.concatenate((S_init,np.array([0.0]*1))),(nSim_terminal,1))
 
     return t_interior, S_interior, t_init, S_init
 
