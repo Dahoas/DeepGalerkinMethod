@@ -47,6 +47,7 @@ saveOutput = True
 saveName   = 'HeatEquation_gaussian'
 saveFigure = True
 figureName = 'HeatEquation_gaussian.png'
+shortTermFigureName = 'HeatEquation_gaussian_short.png'
 
 #%% Black-Scholes European call price
 
@@ -151,7 +152,7 @@ def loss(model, t_interior, S_interior, t_bound, S_bound, t_terminal, S_terminal
     #Target is boundary function
     #Try to avoid floating point equality
     #Placeholder is kind of like \cdot(precomposition)
-    gauss = lambda x : np.exp(-3*x**2)
+    gauss = lambda x : 3*np.exp(-12*(x-1)**2) + 3*np.exp(-12*(x+1)**2)
     tf_gauss = tf.py_function(func=gauss,inp=[S_terminal],Tout=tf.float32)
     target_payoff = tf_gauss
     fitted_payoff = model(t_terminal, S_terminal)
@@ -210,7 +211,7 @@ for i in range(sampling_stages):
     print(loss, L1, L2, L3, i)
     losses.append(loss)
     l1_losses.append(L1)
-    l3_losses.append(L2)
+    l2_losses.append(L2)
     l3_losses.append(L3)
 plot_loss(losses,"heat_total_loss")
 plot_loss(l1_losses,"heat_l1_loss")
@@ -273,3 +274,46 @@ plt.subplots_adjust(wspace=0.3, hspace=0.4)
 
 if saveFigure:
     plt.savefig(figureName)
+
+plt.clf()
+
+valueTimes = [t_low, (5/6)*t_low+(1/6)*(t_low + .5), (4/6)*t_low+(2/6)*(t_low + .5),(3/6)*t_low+(3/6)*(t_low + .5),(2/6)*t_low+(4/6)*(t_low + .5),(1/6)*t_low+(5/6)*(t_low + .5), (t_low + .5)]
+
+# vector of t and S values for plotting
+S_plot = np.linspace(x_low, x_high, n_plot)
+
+for i, curr_t in enumerate(valueTimes):
+    
+    # specify subplot
+    plt.subplot(3,3,i+1)
+    
+    # simulate process at current t 
+    #Note this is vectorized
+    optionValue = HeatCall(S_plot, curr_t)
+    
+    # compute normalized density at all x values to plot and current t value
+    t_plot = curr_t * np.ones_like(S_plot.reshape(-1,1))
+    fitted_optionValue = sess.run([V], feed_dict= {t_interior_tnsr:t_plot, S_interior_tnsr:S_plot.reshape(-1,1)})
+    
+    # plot histogram of simulated process values and overlay estimated density
+    plt.plot(S_plot, optionValue, color = 'b', label='Analytical Solution', linewidth = 3, linestyle=':')
+    plt.plot(S_plot, fitted_optionValue[0], color = 'r', label='DGM estimate')    
+    
+    # subplot options
+    plt.ylim(ymin=-1.0, ymax=3.0)
+    plt.xlim(xmin=x_low, xmax=x_high)
+    plt.xlabel(r"Space", fontsize=15, labelpad=10)
+    plt.ylabel(r"Heat", fontsize=15, labelpad=20)
+    plt.title(r"\boldmath{$t$}\textbf{ = %.2f}"%(curr_t), fontsize=18, y=1.03)
+    plt.xticks(fontsize=13)
+    plt.yticks(fontsize=13)
+    plt.grid(linestyle=':')
+    
+    if i == 0:
+        plt.legend(loc='upper left', prop={'size': 16})
+    
+# adjust space between subplots
+plt.subplots_adjust(wspace=0.3, hspace=0.4)
+
+if saveFigure:
+    plt.savefig(shortTermFigureName)
