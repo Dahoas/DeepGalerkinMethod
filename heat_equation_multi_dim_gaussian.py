@@ -14,7 +14,7 @@ from heat_plot import *
 #%% Parameters 
 k=1
 eps = 1e-5
-dim = 1
+dim = 2
 l1_loss_scale = 1
 l2_loss_scale = 1
 l3_loss_scale = 1
@@ -145,13 +145,14 @@ def loss(model, t_interior, S_interior, t_bound, S_bound, t_terminal, S_terminal
     # Loss term #1: PDE
     # compute function value and derivatives at current sampled points
     #Is this predicted value?
+    #No clue how stuff in here is typechecking...
     V = model(t_interior, S_interior)
-    V_t = tf.gradients(V, t_interior)
-    V_s = tf.gradients(V, S_interior)
+    V_t = tf.gradients(V, t_interior)[0]
+    V_s = tf.gradients(V, S_interior)[0]
     #This is the hessian
-    V_ss = tf.gradients(V_s, S_interior)
-    laplacian = tf.linalg.trace(V_ss)
-    #laplacian = V_ss
+    V_ss = tf.gradients(V_s, S_interior)[0]
+    #laplacian = tf.linalg.trace(V_ss)
+    laplacian = V_ss
     #Not sure how indexing will work
     #for i in range(dim):
     #    V_s = tf.gradients(V,S_interior)[i]
@@ -173,7 +174,8 @@ def loss(model, t_interior, S_interior, t_bound, S_bound, t_terminal, S_terminal
     #Try to avoid floating point equality
     #Placeholder is kind of like \cdot(precomposition)
     #Currently initial condition is tight gaussian heat spike
-    gauss = lambda x : np.exp(-3*x**2)
+    #No clue how these conditions working in 2d: works symbolically but not in my other mental model? Magical
+    gauss = lambda x : 3*np.exp(-20*(x-1)**2) + np.exp(-20*(x-0.5)**2) + np.exp(-10*(x+0.5)**2)
     tf_gauss = tf.py_function(func=gauss,inp=[S_terminal],Tout=tf.float32)
     
     target_payoff = tf.math.reduce_prod(tf.math.exp(tf.math.scalar_mul(-3.0,tf.math.square(S_terminal))),axis=1)

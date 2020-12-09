@@ -153,7 +153,7 @@ def loss(model, t_interior, S_interior, t_bound, S_bound, t_terminal, S_terminal
     #Target is boundary function
     #Try to avoid floating point equality
     #Placeholder is kind of like \cdot(precomposition)
-    gauss = lambda x : np.exp(-3*(x)**2)
+    gauss = lambda x : 3*np.exp(-20*(x-1)**2) + np.exp(-20*(x-0.5)**2) + np.exp(-10*(x+0.5)**2)
     tf_gauss = tf.py_function(func=gauss,inp=[S_terminal],Tout=tf.float32)
     target_payoff = tf_gauss
     fitted_payoff = model(t_terminal, S_terminal)
